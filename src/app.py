@@ -7,16 +7,14 @@ app = Flask(__name__)
 app.config['LDAP_URI'] =  environ.get("LDAP_URI", default="ldap://localhost")
 app.config['LDAP_BIND_TEMPLATE'] = environ.get("LDAP_BIND_TEMPLATE", default="%s")
 
-def check(authorization_header):
-    try:
-        authtype, authdata = authorization_header.split(" ")
-        if authtype != 'Basic':
-            return False
-        username, password = b64decode(authdata).decode("utf-8").split(":")
-    except Exception as e:
-        app.logger.warn("Invalid authorization format: %s" % str(e))
-        return False
+def parse_basic_auth():
+    auth_header = request.headers.get('Authorization')
+    authtype, authdata = auth_header.split(" ")
+    if authtype != 'Basic':
+        raise Exception('Invalid authorization type.')  
+    return b64decode(authdata).decode("utf-8").split(":")
 
+def check(username, password):
     try:
         conn = ldap.initialize(app.config['LDAP_URI'])
         conn.simple_bind_s(app.config['LDAP_BIND_TEMPLATE'] % (username), password)
@@ -29,10 +27,11 @@ def check(authorization_header):
 
 @app.route('/auth')
 def confidential():
-    authorization_header = request.headers.get('Authorization')
-    if authorization_header and check(authorization_header):
-        return "Authorized", 200
-    else:
+    try:
+        username, password = get_basic_auth()
         response = Response()
-        response.headers['WWW-Authenticate'] = 'Basic'
-        return response, 401
+        if check(username, password):
+            response.headers['X-Username'] = username
+            return response, 200
+        else:
+            response.headers['WWW-Authenticate'] = 'Basic'

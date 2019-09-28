@@ -26,7 +26,7 @@ def check(username, password):
         return False
 
 @app.route('/auth')
-def confidential():
+def auth():
     try:
         username, password = get_basic_auth()
         response = Response()
@@ -35,3 +35,7 @@ def confidential():
             return response, 200
         else:
             response.headers['WWW-Authenticate'] = 'Basic'
+            return response, 401
+    except:
+        app.logger.warn('Problem processing request: %s', str(e))
+        return "Bad Request", 400
